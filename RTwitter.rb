@@ -16,126 +16,68 @@ class RTwitter
 	end
 
 	def post(endpoint,additional_params = Hash.new)
-		
+
 		oauth_params = oauth
 		base_params = oauth_params.merge(additional_params)
-		key_params = [@cks,@ats]
 		base_params = Hash[base_params.sort]
-		query = base_params.map{|key,value|
-			"#{escape(key)}=#{escape(value)}"
-		}.join('&')
-		url = "https://api.twitter.com/1.1/#{endpoint}.json"
+		query = join_query(base_params)
+		url = url(endpoint)
 		base = 'POST&' + escape(url) + '&' + escape(query)
-		key = key_params[0] + '&' + key_params[1]
-		signature = Base64.encode64(OpenSSL::HMAC.digest("sha1",key, base)).chomp
-		oauth_params['oauth_signature'] = signature
-		header = oauth_params.map{|key,value|
-			"#{escape(key)}=\"#{escape(value)}\""
-		}.join(',')
-		header = {'Authorization' => 'OAuth ' + header}
-		body = additional_params.map{|key,value|
-			"#{escape(key)}=#{escape(value)}"
-		}.join('&')
+		key = @cks + '&' + @ats
+		oauth_params['oauth_signature'] = Base64.encode64(OpenSSL::HMAC.digest("sha1",key, base)).chomp
+		header = {'Authorization' => 'OAuth ' + join_header(oauth_params)}
+		body = join_body(additional_params)
 		response = post_request(url,body,header)
-		return response
+		return JSON.parse(response.body)
+
 	end
 	
 	def get(endpoint,additional_params = Hash.new)
-		
+
 		oauth_params = oauth
 		base_params = oauth_params.merge(additional_params)
-		key_params = [@cks,@ats]
 		base_params = Hash[base_params.sort]
-		query = base_params.map{|key,value|
-			"#{escape(key)}=#{escape(value)}"
-		}.join('&')
-		url = "https://api.twitter.com/1.1/#{endpoint}.json"
+		query = join_query(base_params)
+		url = url(endpoint)
 		base = 'GET&' + escape(url) + '&' + escape(query)
-		key = key_params[0] + '&' + key_params[1]
-		signature = Base64.encode64(OpenSSL::HMAC.digest("sha1",key, base)).chomp
-		oauth_params['oauth_signature'] = signature
-		header = oauth_params.map{|key,value|
-			"#{escape(key)}=\"#{escape(value)}\""
-		}.join(',')
-		header = {'Authorization' => 'OAuth ' + header}
-		body = additional_params.map{|key,value|
-			"#{escape(key)}=#{escape(value)}"
-		}.join('&')
+		key = @cks + '&' + @ats
+		oauth_params['oauth_signature'] = Base64.encode64(OpenSSL::HMAC.digest("sha1",key, base)).chomp
+		header = {'Authorization' => 'OAuth ' + join_header(oauth_params)}
+		body = join_body(additional_params)
 		response = get_request(url,body,header)
-		return response
+		return JSON.parse(response.body)
+
 	end
 	
-	def post_media(image)
-		
-		endpoint = "https://upload.twitter.com/1.1/media/upload.json"
-		additional_params = {'media'=> Base64.encode64(File.new(image).read).chomp }
-		oauth_params = oauth
-		base_params = oauth_params.merge(additional_params)
-		key_params = [@cks,@ats]
-		base_params = Hash[base_params.sort]
-		query = base_params.map{|key,value|
-			"#{escape(key)}=#{escape(value)}"
-		}.join('&')
-		url = "https://upload.twitter.com/1.1/media/upload.json"
-		base = 'POST&' + escape(url) + '&' + escape(query)
-		key = key_params[0] + '&' + key_params[1]
-		signature = Base64.encode64(OpenSSL::HMAC.digest("sha1",key, base)).chomp
-		oauth_params['oauth_signature'] = signature
-		header = oauth_params.map{|key,value|
-			"#{escape(key)}=\"#{escape(value)}\""
-		}.join(',')
-		header = {'Authorization' => 'OAuth ' + header}
-		body = additional_params.map{|key,value|
-			"#{escape(key)}=#{escape(value)}"
-		}.join('&')
-		response = post_request(url,body,header)
-		return response
-	end
-
 	def streaming(endpoint,additional_params = Hash.new)
-		endpoint = streaming_url(endpoint)
+		
 		oauth_params = oauth
 		base_params = oauth_params.merge(additional_params)
-		key_params = [@cks,@ats]
 		base_params = Hash[base_params.sort]
-		query = base_params.map{|key,value|
-			"#{escape(key)}=#{escape(value)}"
-		}.join('&')
-		base = 'GET&' + escape(endpoint) + '&' + escape(query)
-		key = key_params[0] + '&' + key_params[1]
-		signature = Base64.encode64(OpenSSL::HMAC.digest("sha1",key, base)).chomp
-		oauth_params['oauth_signature'] = signature
-		header = oauth_params.map{|key,value|
-			"#{escape(key)}=\"#{escape(value)}\""
-		}.join(',')
-		header = {'Authorization' => 'OAuth ' + header}
-		body = additional_params.map{|key,value|
-			"#{escape(key)}=#{escape(value)}"
-		}.join('&')
-		
-		uri = URI.parse(endpoint)
-		https = Net::HTTP.new(uri.host, uri.port)
-		https.use_ssl = true
-		https.verify_mode = OpenSSL::SSL::VERIFY_NONE
-		request = Net::HTTP::Get.new(uri.path + '?' + body,header)
+		query = join_query(base_params)
+		url = url(endpoint)
+		base = 'GET&' + escape(url) + '&' + escape(query)
+		key = @cks + '&' + @ats
+		oauth_params['oauth_signature'] = Base64.encode64(OpenSSL::HMAC.digest("sha1",key, base)).chomp
+		header = {'Authorization' => 'OAuth ' + join_header(oauth_params)}
+		body = join_body(additional_params)
 		buffer = ''
-		https.request(request){|response|
-			response.read_body{|chunk|
-				if buffer != ''
+		streaming_request(url,body,header){|chunk|
+			if buffer != ''
 				chunk = buffer + chunk
 				buffer = ''
-				end
-
-				begin
-					status = JSON.parse(chunk)
-				rescue
-					buffer << chunk
-					next
-				end
-					
-				yield status
-			}
+			end
+			
+			begin
+				status = JSON.parse(chunk)
+			rescue
+				buffer << chunk
+				next
+			end
+			
+			yield status
 		}
+
 	end
 
 	private
@@ -143,10 +85,13 @@ class RTwitter
 	RESERVED_CHARACTERS = /[^a-zA-Z0-9\-\.\_\~]/
 
 	def escape(value)
+
 		URI.escape(value.to_s, RESERVED_CHARACTERS)
+	
 	end
 
 	def post_request(url,body,header)
+		
 		uri = URI.parse(url)
 		https = Net::HTTP.new(uri.host, uri.port)
 		https.use_ssl = true
@@ -154,15 +99,12 @@ class RTwitter
 		response = https.start{|https|
 			https.post(uri.path,body,header)
 		}
-		begin
-			response = JSON.parse(response.body)
-		rescue
-			return response.body
-		end
 		return response
+	
 	end
-
+	
 	def get_request(url,body,header)
+		
 		uri = URI.parse(url)
 		https = Net::HTTP.new(uri.host, uri.port)
 		https.use_ssl = true
@@ -170,16 +112,27 @@ class RTwitter
 		response = https.start{|https|
 			https.get(uri.path + '?' + body, header)
 		}
-		begin
-			response = JSON.parse(response.body)
-		rescue
-			return response.body
-		end
 		return response
+	
+	end
+
+	def streaming_request(url,body,header)
+		
+		uri = URI.parse(url)
+		https = Net::HTTP.new(uri.host, uri.port)
+		https.use_ssl = true
+		https.verify_mode = OpenSSL::SSL::VERIFY_NONE
+		request = Net::HTTP::Get.new(uri.path + '?' + body,header)
+		https.request(request){|response|
+			response.read_body{|chunk|
+				yield chunk
+			}
+		}
+	
 	end
 
 	def oauth
-		{
+		return {
 			'oauth_consumer_key'     => @ck,
 			'oauth_signature_method' => 'HMAC-SHA1',
 			'oauth_timestamp'        => Time.now.to_i.to_s,
@@ -189,18 +142,49 @@ class RTwitter
 		}
 	end
 
-	def streaming_url(endpoint)
+	def url(endpoint)
+		
 		list = {
+			'media/upload'    => 'https://upload.twitter.com/1.1/media/upload.json',
 			'statuses/filter' => 'https://stream.twitter.com/1.1/statuses/filter.json',
 			'statuses/sample' => 'https://stream.twitter.com/1.1/statuses/sample.json',
-			'user' => 'https://userstream.twitter.com/1.1/user.json',
-			'site' => 'https://sitestream.twitter.com/1.1/site.json'
+			'user'            => 'https://userstream.twitter.com/1.1/user.json',
+			'site'            => 'https://sitestream.twitter.com/1.1/site.json'
 		}
 		if list.include?(endpoint)
 			return list[endpoint]
 		else
-			return endpoint
+			return "https://api.twitter.com/1.1/#{endpoint}.json"
 		end
+
+	end
+
+	def join_query(params)
+		
+		query = params.map{|key,value|
+			"#{escape(key)}=#{escape(value)}"
+		}.join('&')
+		return query
+	
+	end
+
+	def join_header(params)
+		
+		header = params.map{|key,value|
+			"#{escape(key)}=\"#{escape(value)}\""
+		}.join(',')
+		return header
+	
+	end
+
+	def join_body(params)
+		
+		body = params.map{|key,value|
+			"#{escape(key)}=#{escape(value)}"
+		}.join('&')
+		return body
+	
 	end
 
 end
+

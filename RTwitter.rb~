@@ -15,7 +15,7 @@ class RTwitter
 		@ats = ats
 	end
 
-	def post(endpoint,additional_params = {''=>''})
+	def post(endpoint,additional_params = Hash.new)
 		
 		oauth_params = oauth
 		base_params = oauth_params.merge(additional_params)
@@ -40,7 +40,7 @@ class RTwitter
 		return response
 	end
 	
-	def get(endpoint,additional_params = {''=>''})
+	def get(endpoint,additional_params = Hash.new)
 		
 		oauth_params = oauth
 		base_params = oauth_params.merge(additional_params)
@@ -118,8 +118,10 @@ class RTwitter
 		https.use_ssl = true
 		https.verify_mode = OpenSSL::SSL::VERIFY_NONE
 		request = Net::HTTP::Get.new(uri.path + '?' + body,header)
+		https.set_debug_output($stderr)
 		buffer = ''
 		https.request(request){|response|
+=begin
 			response.read_body{|chunk|
 				if buffer != ''
 				chunk = buffer + chunk
@@ -135,6 +137,7 @@ class RTwitter
 					
 				yield status
 			}
+=end
 		}
 	end
 
