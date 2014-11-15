@@ -7,7 +7,7 @@ rt = RTwitter.new(ck,cks,at,ats)
 
 # Streaming
 rt.streaming('statuses/sample'){|status|
-	if.include?('text')
+	if status.include?('text')
 		pp status
 	end
 }
