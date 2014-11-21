@@ -8,12 +8,59 @@ require'net/http'
 
 class RTwitter
 	
-	def initialize(ck,cks,at,ats)
+	def initialize(ck ,cks ,at = nil ,ats = nil)
 		@ck = ck
 		@cks = cks
 		@at = at
 		@ats = ats
 	end
+
+	def request_token
+
+		oauth_params = oauth
+		oauth_params.delete('oauth_token')
+		oauth_params['oauth_callback'] = 'oob'
+		base_params = Hash[oauth_params.sort]
+		query = join_query(base_params)
+		url = 'https://api.twitter.com/oauth/request_token'
+		base = 'POST&' + escape(url) + '&' + escape(query)
+		key = @cks + '&'
+		oauth_params['oauth_signature'] = Base64.encode64(OpenSSL::HMAC.digest("sha1",key, base)).chomp
+		header = {'Authorization' => 'OAuth ' + join_header(oauth_params)}
+		body = ''
+		response = post_request(url,body,header)
+
+		request_tokens = response.body.split('&')
+		@request_token = request_tokens[0].split('=')[1]
+		@request_token_secret = request_tokens[1].split('=')[1]
+
+		return "https://api.twitter.com/oauth/authenticate?oauth_token=#{@request_token}"
+
+	end
+
+	def access_token(pin)
+
+		oauth_params = oauth
+		oauth_params.delete('oauth_token')
+		oauth_params['oauth_verifier'] = pin.chomp
+		oauth_params['oauth_token'] = @request_token
+		base_params = Hash[oauth_params.sort]
+		query = join_query(base_params)
+		url = 'https://api.twitter.com/oauth/access_token'
+		base = 'POST&' + escape(url) + '&' + escape(query)
+		key = @cks + '&' + @request_token_secret
+		oauth_params['oauth_signature'] = Base64.encode64(OpenSSL::HMAC.digest("sha1",key, base)).chomp
+		header = {'Authorization' => 'OAuth ' + join_header(oauth_params)}
+		body = ''
+		response = post_request(url,body,header)
+
+		access_tokens = response.body.split('&')
+		@at = access_tokens[0].split('=')[1]
+		@ats = access_tokens[1].split('=')[1]
+		@user_id = access_tokens[2].split('=')[1]
+		@screen_name = access_tokens[3].split('=')[1]
+	end
+
 
 	def post(endpoint,additional_params = Hash.new)
 

@@ -2,11 +2,20 @@
 
 You can use REST and **Streaming** API.
 
-## How to use ?  
+## How to use ?
+
++ Require this File  
+`require'path/to/RTwitter.rb'`
+
++ New Instance  
+If you have access\_token and access\_token\_secret  
+`rt = RTwitter.new(ck,cks,at,ats)`  
+If you don't have...  
+`rt = RTwitter.new(ck,cks)`  
+`puts rt.request_token`  
+`rt.access_token(STDIN.gets)`  
 
 + POST request  
-`require'./RTwitter.rb'`  
-`rt = RTwitter.new(ck,cks,at,ats)`  
 `result = rt.post(endpoint,{parameter => value})`  
 example...  
 `endpoint = 'statuses/update'`  
@@ -14,8 +23,6 @@ example...
 `value = 'Hello World!'`  
 
 + GET request  
-`require'./RTwitter.rb'`  
-`rt = RTwitter.new(ck,cks,at,ats)`  
 `result = rt.get(endpoint,{parameter => value})`  
 example...  
 `endpoint = 'users/show'`  
@@ -23,8 +30,6 @@ example...
 `value = 'CIA'`  
 
 + Streaming  
-`require'./RTwitter.rb'`  
-`rt = RTwitter.new(ck,cks,at,ats)`  
 `rt.streaming(endpoint,{parameter => value}){|status| p status }`  
 example...  
 `endpoint = 'statuses/filter'`  
