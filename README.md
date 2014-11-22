@@ -14,6 +14,12 @@ If you don't have...
 `rt = RTwitter.new(ck,cks)`  
 `puts rt.request_token`  
 `rt.access_token(STDIN.gets)`  
+or para-xauth  
+`rt = RTwitter.new(ck,cks)`  
+`rt.login(screen_name,password)`  
+or xauth(only official key)  
+`rt = RTwitter(ck,cks)`  
+`rt.xauth(screen_name,password)`  
 
 + POST request  
 `result = rt.post(endpoint,{parameter => value})`  
