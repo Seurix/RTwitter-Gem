@@ -8,11 +8,68 @@ require'net/http'
 
 class RTwitter
 	
+	attr_reader :consumer_key,:consumer_key_secret,:access_token,:access_token_secret,:user_id,:screen_name
+	
 	def initialize(ck ,cks ,at = nil ,ats = nil)
 		@ck = ck
 		@cks = cks
 		@at = at
 		@ats = ats
+	end
+	
+	def login(screen_name,password)
+
+		request_token
+		cookie = Hash.new
+		response = get_request('https://api.twitter.com/oauth/authorize',"oauth_token=#{@request_token}",Hash.new)
+		response.get_fields('Set-Cookie').each{|str|
+			k,v = str[0...str.index(';')].split('=')
+			cookie[k] = v
+		}
+		cookie = cookie.map{|k,v|
+			"#{k}=#{v}"
+		}.join(';')
+		m = response.body.match(/<input name="authenticity_token" type="hidden" value="(.+?)" \/>/)
+		authenticity_token = m[1]
+		body = {
+			'authenticity_token' => authenticity_token,
+			'oauth_token' => @request_token,
+			'session[username_or_email]' => screen_name,
+			'session[password]' => password
+		}
+		body = join_body(body)
+		response = post_request('https://api.twitter.com/oauth/authorize',body,{'Cookie' => cookie})
+		m = response.body.match(/<kbd aria-labelledby="code-desc"><code>(.+?)<\/code><\/kbd>/)
+		pin = m[1]
+		access_token(pin)
+
+	end
+
+	def xauth(screen_name,password)
+
+		additional_params = {
+			'x_auth_mode' => 'client_auth',
+			'x_auth_username' => screen_name,
+			'x_auth_password' => password
+		}
+		oauth_params = oauth
+		oauth_params.delete('oauth_token')
+		base_params = oauth_params.merge(additional_params)
+		base_params = Hash[base_params.sort]
+		query = join_query(base_params)
+		url = 'https://api.twitter.com/oauth/access_token'
+		base = 'POST&' + escape(url) + '&' + escape(query)
+		key = @consumer_key_secret + '&'
+		oauth_params['oauth_signature'] = Base64.encode64(OpenSSL::HMAC.digest("sha1",key, base)).chomp
+		header = {'Authorization' => 'OAuth ' + join_header(oauth_params)}
+		body = join_body(additional_params)
+		response = post_request(url,body,header)
+		access_tokens = response.body.split('&')
+		@access_token = access_tokens[0].split('=')[1]
+		@access_token_secret = access_tokens[1].split('=')[1]
+		@user_id = access_tokens[2].split('=')[1]
+		@screen_name = access_tokens[3].split('=')[1]
+
 	end
 
 	def request_token
