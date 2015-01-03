@@ -9,12 +9,13 @@ require'net/http'
 class RTwitter
 	
 	attr_reader :consumer_key,:consumer_key_secret,:access_token,:access_token_secret,:user_id,:screen_name
-	
+	attr_accessor :userAgent
 	def initialize(ck ,cks ,at = nil ,ats = nil)
 		@consumer_key = ck
 		@consumer_key_secret = cks
 		@access_token = at
 		@access_token_secret = ats
+		@userAgent = 'RTwitter'
 	end
 	
 	def login(screen_name,password)
@@ -38,7 +39,7 @@ class RTwitter
 			'session[password]' => password
 		}
 		body = build_body(body)
-		response = post_request('https://api.twitter.com/oauth/authorize',body,{'Cookie' => cookie})
+		response = post_request('https://api.twitter.com/oauth/authorize',body,{'Cookie' => cookie,'User-Agent' => @userAgent})
 		begin
 			m = response.body.match(/<kbd aria-labelledby="code-desc"><code>(.+?)<\/code><\/kbd>/)
 			pin = m[1]
@@ -60,7 +61,7 @@ class RTwitter
 		base = 'POST&' + escape(url) + '&' + escape(query)
 		key = @consumer_key_secret + '&'
 		oauth_params['oauth_signature'] = Base64.encode64(OpenSSL::HMAC.digest("sha1",key, base)).chomp
-		header = {'Authorization' => 'OAuth ' + build_header(oauth_params)}
+		header = {'Authorization' => 'OAuth ' + build_header(oauth_params),'User-Agent' => @userAgent}
 		response = post_request(url,'',header)
 
 		items = response.body.split('&')
@@ -81,7 +82,7 @@ class RTwitter
 		base = 'POST&' + escape(url) + '&' + escape(query)
 		key = @consumer_key_secret + '&' + @request_token_secret
 		oauth_params['oauth_signature'] = Base64.encode64(OpenSSL::HMAC.digest("sha1",key, base)).chomp
-		header = {'Authorization' => 'OAuth ' + build_header(oauth_params)}
+		header = {'Authorization' => 'OAuth ' + build_header(oauth_params),'User-Agent' => @userAgent}
 		body = ''
 		response = post_request(url,body,header)
 
@@ -139,21 +140,14 @@ class RTwitter
 
 private
 	def signature(method,url,additional_params)
-		oauth_params = {
-			'oauth_consumer_key'     => @consumer_key,
-			'oauth_signature_method' => 'HMAC-SHA1',
-			'oauth_timestamp'        => Time.now.to_i.to_s,
-			'oauth_version'          => '1.0',
-			'oauth_nonce'            => Random.new_seed.to_s,
-			'oauth_token'            => @access_token
-		}
+		oauth_params = oauth
 		base_params = oauth_params.merge(additional_params)
 		base_params = Hash[base_params.sort]
 		query = build_query(base_params)
 		base = method + '&' + escape(url) + '&' + escape(query)
 		key = @consumer_key_secret + '&' +  @access_token_secret
 		oauth_params['oauth_signature'] = Base64.encode64(OpenSSL::HMAC.digest("sha1",key, base)).chomp
-		header = {'Authorization' => 'OAuth ' + build_header(oauth_params)}
+		header = {'Authorization' => 'OAuth ' + build_header(oauth_params),'User-Agent' => @userAgent}
 		return header
 	end
 	
