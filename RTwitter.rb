@@ -11,17 +11,17 @@ class RTwitter
 	attr_reader :consumer_key,:consumer_key_secret,:access_token,:access_token_secret,:user_id,:screen_name
 	
 	def initialize(ck ,cks ,at = nil ,ats = nil)
-		@ck = ck
-		@cks = cks
-		@at = at
-		@ats = ats
+		@consumer_key = ck
+		@consumer_key_secret = cks
+		@access_token = at
+		@access_token_secret = ats
 	end
 	
 	def login(screen_name,password)
-
+		
 		request_token
 		cookie = Hash.new
-		response = get_request('https://api.twitter.com/oauth/authorize',"oauth_token=#{@request_token}",Hash.new)
+		response = get_request('https://api.twitter.com/oauth/authenticate',"oauth_token=#{@request_token}",Hash.new)
 		response.get_fields('Set-Cookie').each{|str|
 			k,v = str[0...str.index(';')].split('=')
 			cookie[k] = v
@@ -37,38 +37,15 @@ class RTwitter
 			'session[username_or_email]' => screen_name,
 			'session[password]' => password
 		}
-		body = join_body(body)
+		body = build_body(body)
 		response = post_request('https://api.twitter.com/oauth/authorize',body,{'Cookie' => cookie})
-		m = response.body.match(/<kbd aria-labelledby="code-desc"><code>(.+?)<\/code><\/kbd>/)
-		pin = m[1]
+		begin
+			m = response.body.match(/<kbd aria-labelledby="code-desc"><code>(.+?)<\/code><\/kbd>/)
+			pin = m[1]
+		rescue
+			raise RTwitterException,'ユーザー名、またはパスワードが無効です.'
+		end
 		access_token(pin)
-
-	end
-
-	def xauth(screen_name,password)
-
-		additional_params = {
-			'x_auth_mode' => 'client_auth',
-			'x_auth_username' => screen_name,
-			'x_auth_password' => password
-		}
-		oauth_params = oauth
-		oauth_params.delete('oauth_token')
-		base_params = oauth_params.merge(additional_params)
-		base_params = Hash[base_params.sort]
-		query = join_query(base_params)
-		url = 'https://api.twitter.com/oauth/access_token'
-		base = 'POST&' + escape(url) + '&' + escape(query)
-		key = @consumer_key_secret + '&'
-		oauth_params['oauth_signature'] = Base64.encode64(OpenSSL::HMAC.digest("sha1",key, base)).chomp
-		header = {'Authorization' => 'OAuth ' + join_header(oauth_params)}
-		body = join_body(additional_params)
-		response = post_request(url,body,header)
-		access_tokens = response.body.split('&')
-		@access_token = access_tokens[0].split('=')[1]
-		@access_token_secret = access_tokens[1].split('=')[1]
-		@user_id = access_tokens[2].split('=')[1]
-		@screen_name = access_tokens[3].split('=')[1]
 
 	end
 
@@ -78,20 +55,17 @@ class RTwitter
 		oauth_params.delete('oauth_token')
 		oauth_params['oauth_callback'] = 'oob'
 		base_params = Hash[oauth_params.sort]
-		query = join_query(base_params)
+		query = build_query(base_params)
 		url = 'https://api.twitter.com/oauth/request_token'
 		base = 'POST&' + escape(url) + '&' + escape(query)
-		key = @cks + '&'
+		key = @consumer_key_secret + '&'
 		oauth_params['oauth_signature'] = Base64.encode64(OpenSSL::HMAC.digest("sha1",key, base)).chomp
-		header = {'Authorization' => 'OAuth ' + join_header(oauth_params)}
-		body = ''
-		response = post_request(url,body,header)
+		header = {'Authorization' => 'OAuth ' + build_header(oauth_params)}
+		response = post_request(url,'',header)
 
-		request_tokens = response.body.split('&')
-		@request_token = request_tokens[0].split('=')[1]
-		@request_token_secret = request_tokens[1].split('=')[1]
-
-		return "https://api.twitter.com/oauth/authenticate?oauth_token=#{@request_token}"
+		items = response.body.split('&')
+		@request_token = items[0].split('=')[1]
+		@request_token_secret = items[1].split('=')[1]
 
 	end
 
@@ -102,18 +76,18 @@ class RTwitter
 		oauth_params['oauth_verifier'] = pin.chomp
 		oauth_params['oauth_token'] = @request_token
 		base_params = Hash[oauth_params.sort]
-		query = join_query(base_params)
+		query = build_query(base_params)
 		url = 'https://api.twitter.com/oauth/access_token'
 		base = 'POST&' + escape(url) + '&' + escape(query)
-		key = @cks + '&' + @request_token_secret
+		key = @consumer_key_secret + '&' + @request_token_secret
 		oauth_params['oauth_signature'] = Base64.encode64(OpenSSL::HMAC.digest("sha1",key, base)).chomp
-		header = {'Authorization' => 'OAuth ' + join_header(oauth_params)}
+		header = {'Authorization' => 'OAuth ' + build_header(oauth_params)}
 		body = ''
 		response = post_request(url,body,header)
 
 		access_tokens = response.body.split('&')
-		@at = access_tokens[0].split('=')[1]
-		@ats = access_tokens[1].split('=')[1]
+		@access_token = access_tokens[0].split('=')[1]
+		@access_token_secret = access_tokens[1].split('=')[1]
 		@user_id = access_tokens[2].split('=')[1]
 		@screen_name = access_tokens[3].split('=')[1]
 	end
@@ -121,50 +95,29 @@ class RTwitter
 
 	def post(endpoint,additional_params = Hash.new)
 
-		oauth_params = oauth
-		base_params = oauth_params.merge(additional_params)
-		base_params = Hash[base_params.sort]
-		query = join_query(base_params)
 		url = url(endpoint)
-		base = 'POST&' + escape(url) + '&' + escape(query)
-		key = @cks + '&' + @ats
-		oauth_params['oauth_signature'] = Base64.encode64(OpenSSL::HMAC.digest("sha1",key, base)).chomp
-		header = {'Authorization' => 'OAuth ' + join_header(oauth_params)}
-		body = join_body(additional_params)
+		header = signature('POST',url,additional_params)
+		body = build_body(additional_params)
 		response = post_request(url,body,header)
-		return JSON.parse(response.body)
+		return decode(response)
 
 	end
 	
 	def get(endpoint,additional_params = Hash.new)
 
-		oauth_params = oauth
-		base_params = oauth_params.merge(additional_params)
-		base_params = Hash[base_params.sort]
-		query = join_query(base_params)
 		url = url(endpoint)
-		base = 'GET&' + escape(url) + '&' + escape(query)
-		key = @cks + '&' + @ats
-		oauth_params['oauth_signature'] = Base64.encode64(OpenSSL::HMAC.digest("sha1",key, base)).chomp
-		header = {'Authorization' => 'OAuth ' + join_header(oauth_params)}
-		body = join_body(additional_params)
+		header = signature('GET',url,additional_params)
+		body = build_body(additional_params)
 		response = get_request(url,body,header)
-		return JSON.parse(response.body)
-
+		return decode(response)
+		
 	end
 	
 	def streaming(endpoint,additional_params = Hash.new)
 		
-		oauth_params = oauth
-		base_params = oauth_params.merge(additional_params)
-		base_params = Hash[base_params.sort]
-		query = join_query(base_params)
 		url = url(endpoint)
-		base = 'GET&' + escape(url) + '&' + escape(query)
-		key = @cks + '&' + @ats
-		oauth_params['oauth_signature'] = Base64.encode64(OpenSSL::HMAC.digest("sha1",key, base)).chomp
-		header = {'Authorization' => 'OAuth ' + join_header(oauth_params)}
-		body = join_body(additional_params)
+		header = signature('GET',url,additional_params)
+		body = build_body(additional_params)
 		buffer = ''
 		streaming_request(url,body,header){|chunk|
 			if buffer != ''
@@ -184,13 +137,70 @@ class RTwitter
 
 	end
 
-	private
+private
+	def signature(method,url,additional_params)
+		oauth_params = {
+			'oauth_consumer_key'     => @consumer_key,
+			'oauth_signature_method' => 'HMAC-SHA1',
+			'oauth_timestamp'        => Time.now.to_i.to_s,
+			'oauth_version'          => '1.0',
+			'oauth_nonce'            => Random.new_seed.to_s,
+			'oauth_token'            => @access_token
+		}
+		base_params = oauth_params.merge(additional_params)
+		base_params = Hash[base_params.sort]
+		query = build_query(base_params)
+		base = method + '&' + escape(url) + '&' + escape(query)
+		key = @consumer_key_secret + '&' +  @access_token_secret
+		oauth_params['oauth_signature'] = Base64.encode64(OpenSSL::HMAC.digest("sha1",key, base)).chomp
+		header = {'Authorization' => 'OAuth ' + build_header(oauth_params)}
+		return header
+	end
+	
+	def oauth
+		{
+			'oauth_consumer_key'     => @consumer_key,
+			'oauth_signature_method' => 'HMAC-SHA1',
+			'oauth_timestamp'        => Time.now.to_i.to_s,
+			'oauth_version'          => '1.0',
+			'oauth_nonce'            => Random.new_seed.to_s,
+			'oauth_token'            => @access_token
+		}
+	end
 
-	RESERVED_CHARACTERS = /[^a-zA-Z0-9\-\.\_\~]/
+	def decode(response)
+		if response.body == nil
+			raise RTwitterException,'Failed to receive response.'
+		end
+		if response.body == ''
+			raise RTwitterException,'Empty response.'
+		end
+		begin
+			obj = JSON.parse(response.body)
+		rescue
+			return response.body
+		end
+		if obj.include?('error')
+			raise RTwitterException,obj['error']
+		end
+		if obj.include?('errors')
+			if obj['errors'].kind_of?(String)
+				raise RTwitterException,obj['error']
+			else
+				messages = []
+				obj['errors'].each{|errors|
+					messages << errors['message']
+				}
+				raise RTwitterException,messages.join("\n")
+			end
+		end
+		return obj
+	end
 
+	
 	def escape(value)
 
-		URI.escape(value.to_s, RESERVED_CHARACTERS)
+		URI.escape(value.to_s,/[^a-zA-Z0-9\-\.\_\~]/)
 	
 	end
 
@@ -198,10 +208,12 @@ class RTwitter
 		
 		uri = URI.parse(url)
 		https = Net::HTTP.new(uri.host, uri.port)
-		https.use_ssl = true
-		https.verify_mode = OpenSSL::SSL::VERIFY_NONE
+		if uri.port == 443
+			https.use_ssl = true
+			https.verify_mode = OpenSSL::SSL::VERIFY_NONE
+		end
 		response = https.start{|https|
-			https.post(uri.path,body,header)
+			https.post(uri.request_uri,body,header)
 		}
 		return response
 	
@@ -211,10 +223,12 @@ class RTwitter
 		
 		uri = URI.parse(url)
 		https = Net::HTTP.new(uri.host, uri.port)
-		https.use_ssl = true
-		https.verify_mode = OpenSSL::SSL::VERIFY_NONE
+		if uri.port == 443
+			https.use_ssl = true
+			https.verify_mode = OpenSSL::SSL::VERIFY_NONE
+		end
 		response = https.start{|https|
-			https.get(uri.path + '?' + body, header)
+			https.get(uri.request_uri + '?' + body, header)
 		}
 		return response
 	
@@ -224,26 +238,17 @@ class RTwitter
 		
 		uri = URI.parse(url)
 		https = Net::HTTP.new(uri.host, uri.port)
-		https.use_ssl = true
-		https.verify_mode = OpenSSL::SSL::VERIFY_NONE
-		request = Net::HTTP::Get.new(uri.path + '?' + body,header)
+		if uri.port == 443
+			https.use_ssl = true
+			https.verify_mode = OpenSSL::SSL::VERIFY_NONE
+		end
+		request = Net::HTTP::Get.new(uri.request_uri + '?' + body,header)
 		https.request(request){|response|
 			response.read_body{|chunk|
 				yield chunk
 			}
 		}
 	
-	end
-
-	def oauth
-		return {
-			'oauth_consumer_key'     => @ck,
-			'oauth_signature_method' => 'HMAC-SHA1',
-			'oauth_timestamp'        => Time.now.to_i.to_s,
-			'oauth_version'          => '1.0',
-			'oauth_nonce'            => Random.new_seed.to_s,
-			'oauth_token'            => @at
-		}
 	end
 
 	def url(endpoint)
@@ -263,7 +268,7 @@ class RTwitter
 
 	end
 
-	def join_query(params)
+	def build_query(params)
 		
 		query = params.map{|key,value|
 			"#{escape(key)}=#{escape(value)}"
@@ -272,7 +277,7 @@ class RTwitter
 	
 	end
 
-	def join_header(params)
+	def build_header(params)
 		
 		header = params.map{|key,value|
 			"#{escape(key)}=\"#{escape(value)}\""
@@ -281,7 +286,7 @@ class RTwitter
 	
 	end
 
-	def join_body(params)
+	def build_body(params)
 		
 		body = params.map{|key,value|
 			"#{escape(key)}=#{escape(value)}"
@@ -289,6 +294,6 @@ class RTwitter
 		return body
 	
 	end
-
+	
+	class RTwitterException < RuntimeError; end
 end
-
