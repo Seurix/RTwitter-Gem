@@ -179,7 +179,7 @@ private
 		end
 		if obj.include?('errors')
 			if obj['errors'].kind_of?(String)
-				raise RTwitterException,obj['error']
+				raise RTwitterException,obj['errors']
 			else
 				messages = []
 				obj['errors'].each{|errors|
