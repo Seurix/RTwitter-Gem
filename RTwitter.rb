@@ -67,6 +67,7 @@ class RTwitter
 		items = response.body.split('&')
 		@request_token = items[0].split('=')[1]
 		@request_token_secret = items[1].split('=')[1]
+		return "https://api.twitter.com/oauth/authenticate?oauth_token=#{@request_token}"
 
 	end
 
